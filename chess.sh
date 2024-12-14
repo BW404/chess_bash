@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Initialize the chessboard
 initialize_board() {
   board=(
@@ -65,41 +63,78 @@ validate_move() {
 
   case "$piece" in
     ♙) 
+      # Forward movement
       if [[ $dr -eq -1 && $dc -eq 0 && $(get_piece $to_row $to_col) == "." ]]; then
         return 0
+      # Initial two-square movement
       elif [[ $dr -eq -2 && $dc -eq 0 && from_row -eq 6 && $(get_piece $((to_row + 1)) $to_col) == "." && $(get_piece $to_row $to_col) == "." ]]; then
+        return 0
+      # Capture diagonally
+      elif [[ $dr -eq -1 && ${dc#-} -eq 1 && $(get_piece $to_row $to_col) =~ [♟♜♞♝♛♚] ]]; then
         return 0
       fi
       ;;
     ♟) 
+      # Forward movement
       if [[ $dr -eq 1 && $dc -eq 0 && $(get_piece $to_row $to_col) == "." ]]; then
         return 0
+      # Initial two-square movement
       elif [[ $dr -eq 2 && $dc -eq 0 && from_row -eq 1 && $(get_piece $((to_row - 1)) $to_col) == "." && $(get_piece $to_row $to_col) == "." ]]; then
+        return 0
+      # Capture diagonally
+      elif [[ $dr -eq 1 && ${dc#-} -eq 1 && $(get_piece $to_row $to_col) =~ [♙♖♘♗♕♔] ]]; then
         return 0
       fi
       ;;
     ♖|♜) 
       if [[ $dr -eq 0 || $dc -eq 0 ]]; then
-        check_rook_path $from_row $from_col $to_row $to_col && return 0
+        # Check if destination has opponent's piece or is empty
+        local dest_piece=$(get_piece $to_row $to_col)
+        if [[ "$piece" == "♖" && ( "$dest_piece" == "." || "$dest_piece" =~ [♟♜♞♝♛♚] ) ]] || \
+           [[ "$piece" == "♜" && ( "$dest_piece" == "." || "$dest_piece" =~ [♙♖♘♗♕♔] ) ]]; then
+          check_rook_path $from_row $from_col $to_row $to_col && return 0
+        fi
+      fi
+      ;;
+    ♘|♞)
+      # Knight moves in L-shape: 2 squares in one direction and 1 square perpendicular
+      if [[ ( ${dr#-} -eq 2 && ${dc#-} -eq 1 ) || ( ${dr#-} -eq 1 && ${dc#-} -eq 2 ) ]]; then
+        local dest_piece=$(get_piece $to_row $to_col)
+        if [[ "$piece" == "♘" && ( "$dest_piece" == "." || "$dest_piece" =~ [♟♜♞♝♛♚] ) ]] || \
+           [[ "$piece" == "♞" && ( "$dest_piece" == "." || "$dest_piece" =~ [♙♖♘♗♕♔] ) ]]; then
+          return 0
+        fi
       fi
       ;;
     ♗|♝) 
       if [[ ${dr#-} -eq ${dc#-} ]]; then
-        check_b ishop_path $from_row $from_col $to_row $to_col && return 0
+        local dest_piece=$(get_piece $to_row $to_col)
+        if [[ "$piece" == "♗" && ( "$dest_piece" == "." || "$dest_piece" =~ [♟♜♞♝♛♚] ) ]] || \
+           [[ "$piece" == "♝" && ( "$dest_piece" == "." || "$dest_piece" =~ [♙♖♘♗♕♔] ) ]]; then
+          check_bishop_path $from_row $from_col $to_row $to_col && return 0
+        fi
       fi
       ;;
     ♕|♛) 
+      local dest_piece=$(get_piece $to_row $to_col)
       if [[ $dr -eq 0 || $dc -eq 0 || ${dr#-} -eq ${dc#-} ]]; then
-        if [[ $dr -eq 0 || $dc -eq 0 ]]; then
-          check_rook_path $from_row $from_col $to_row $to_col && return 0
-        else
-          check_bishop_path $from_row $from_col $to_row $to_col && return 0
+        if [[ "$piece" == "♕" && ( "$dest_piece" == "." || "$dest_piece" =~ [♟♜♞♝♛♚] ) ]] || \
+           [[ "$piece" == "♛" && ( "$dest_piece" == "." || "$dest_piece" =~ [♙♖♘♗♕♔] ) ]]; then
+          if [[ $dr -eq 0 || $dc -eq 0 ]]; then
+            check_rook_path $from_row $from_col $to_row $to_col && return 0
+          else
+            check_bishop_path $from_row $from_col $to_row $to_col && return 0
+          fi
         fi
       fi
       ;;
     ♔|♚) 
       if [[ ${dr#-} -le 1 && ${dc#-} -le 1 ]]; then
-        return 0
+        local dest_piece=$(get_piece $to_row $to_col)
+        if [[ "$piece" == "♔" && ( "$dest_piece" == "." || "$dest_piece" =~ [♟♜♞♝♛♚] ) ]] || \
+           [[ "$piece" == "♚" && ( "$dest_piece" == "." || "$dest_piece" =~ [♙♖♘♗♕♔] ) ]]; then
+          return 0
+        fi
       fi
       ;;
   esac
@@ -110,13 +145,17 @@ validate_move() {
 check_rook_path() {
   local from_row=$1 from_col=$2 to_row=$3 to_col=$4
   if [[ $from_row -eq $to_row ]]; then
-    for ((col = from_col + 1; col < to_col; col++)); do
+    local start_col=$((from_col < to_col ? from_col + 1 : to_col + 1))
+    local end_col=$((from_col < to_col ? to_col : from_col))
+    for ((col = start_col; col < end_col; col++)); do
       if [[ $(get_piece $from_row $col) != "." ]]; then
         return 1
       fi
     done
   else
-    for ((row = from_row + 1; row < to_row; row++)); do
+    local start_row=$((from_row < to_row ? from_row + 1 : to_row + 1))
+    local end_row=$((from_row < to_row ? to_row : from_row))
+    for ((row = start_row; row < end_row; row++)); do
       if [[ $(get_piece $row $from_col) != "." ]]; then
         return 1
       fi
@@ -128,8 +167,10 @@ check_rook_path() {
 # Check path for bishop movement
 check_bishop_path() {
   local from_row=$1 from_col=$2 to_row=$3 to_col=$4
-  local row_step=$(( (to_row - from_row) / ${dr#-} ))
-  local col_step=$(( (to_col - from_col) / ${dc#-} ))
+  local dr=$((to_row - from_row))
+  local dc=$((to_col - from_col))
+  local row_step=$(( dr / ${dr#-} ))
+  local col_step=$(( dc / ${dc#-} ))
   local row=$((from_row + row_step))
   local col=$((from_col + col_step))
 
@@ -164,11 +205,13 @@ check_for_checkmate() {
   local king_pos
   local opponent_piece
   local can_move=0
+  local king_symbol=$([[ "$current_player" == "White" ]] && echo "♔" || echo "♚")
 
+  # Find the current player's king
   for row in {0..7}; do
     for col in {0..7}; do
       piece=$(get_piece $row $col)
-      if [[ "$piece" == "♔" ]]; then
+      if [[ "$piece" == "$king_symbol" ]]; then
         king_pos="$row $col"
       fi
     done
